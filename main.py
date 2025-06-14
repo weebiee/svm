@@ -32,14 +32,12 @@ def __test_data_iter():
                    row[-2])
 
 
-def read_dataset(data_iter: Iterable[tuple[int, str]], to_predict: str = None):
+def read_dataset(vectorizer: CountVectorizer, data_iter: Iterable[tuple[int, str]], to_predict: str = None):
     if to_predict is not None:
         data_iter = itertools.chain(data_iter, [(-1, to_predict)])
     data_iter = itertools.tee(data_iter)
 
-    vectorizer = CountVectorizer()
-
-    return (csr_matrix(vectorizer.fit_transform(' '.join(jieba.cut(row[1], cut_all=False)) for row in data_iter[0])),
+    return (vectorizer.fit_transform(' '.join(jieba.cut(row[1], cut_all=False)) for row in data_iter[0]),
             list(row[0] for row in data_iter[1]))
 
 
@@ -49,8 +47,17 @@ def be_lazy(no_cache: bool = False):
         print(lazyresult.read_pickles(model_path).to_string())
         return
 
-    (x_train, y_train), (x_test, y_test) = read_dataset(__train_data_iter()), read_dataset(__test_data_iter())
-    clf = LazyClassifier(predictions=True)
+    vectorizer = CountVectorizer()
+
+    train_iter, train_len_iter = itertools.tee(__train_data_iter(), 2)
+    x, y = read_dataset(vectorizer, itertools.chain(train_iter, __test_data_iter()))
+    train_dataset_size = sum(1 for _ in train_len_iter)
+    x_train, x_test = csr_matrix(x[:train_dataset_size]), csr_matrix(x[train_dataset_size:])
+    y_train, y_test = y[:train_dataset_size], y[train_dataset_size:]
+
+    from sklearn.svm import SVC
+
+    clf = LazyClassifier(verbose=1, predictions=True, classifiers=[SVC])
     models, _ = clf.fit(x_train.toarray(), x_test.toarray(), y_train, y_test)
     print(models.to_string())
     with open(model_path, "wb") as f:
@@ -59,7 +66,7 @@ def be_lazy(no_cache: bool = False):
 
 def predict(query: str):
     clf = Perceptron()
-    data_set = read_dataset(to_predict=query)
+    data_set = read_dataset(to_predict=query, data_iter=__train_data_iter())
     train_set_x, train_set_y = data_set[0][0:-2], data_set[1][0:-2]
     clf.fit(train_set_x, train_set_y)
 
