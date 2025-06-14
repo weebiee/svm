@@ -55,9 +55,17 @@ def be_lazy(no_cache: bool = False):
     x_train, x_test = csr_matrix(x[:train_dataset_size]), csr_matrix(x[train_dataset_size:])
     y_train, y_test = y[:train_dataset_size], y[train_dataset_size:]
 
-    from sklearn.svm import SVC
+    from sklearn.metrics import f1_score
+    from sklearn.svm import LinearSVC
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import SGDClassifier
 
-    clf = LazyClassifier(verbose=1, predictions=True, classifiers=[SVC])
+    def weighted_f1(label_true, label_pred):
+        return f1_score(label_true, label_pred, average='weighted')
+
+    clf = LazyClassifier(verbose=1, predictions=True,
+                         classifiers=[LinearSVC, Perceptron, SGDClassifier, RandomForestClassifier],
+                         custom_metric=weighted_f1)
     models, _ = clf.fit(x_train.toarray(), x_test.toarray(), y_train, y_test)
     print(models.to_string())
     with open(model_path, "wb") as f:
